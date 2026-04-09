@@ -40,13 +40,14 @@ FEATURES = [
 
 @app.route("/")
 def serve():
-    """Serves the main React application."""
-    return send_from_directory(app.static_folder, 'index.html')
+    return jsonify({
+        "status": "success",
+        "message": "CityCare AI Backend is successfully running! Please visit the Vercel Frontend URL to visually interact with the app."
+    })
 
 @app.route('/<path:path>')
 def static_proxy(path):
-    """Serves static files (JS, CSS, Images) for React."""
-    return send_from_directory(app.static_folder, path)
+    return jsonify({"error": "Endpoint not found"}), 404
 
 # --- API ROUTES ---
 
