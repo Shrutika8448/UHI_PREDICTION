@@ -24,18 +24,18 @@ def initialize_ee():
         print(f"EE Initialization Failed: {e}")
 
 def get_roi(city):
-    """Standard Geocoding request to find the center of the city."""
-    url = f"https://maps.googleapis.com/maps/api/geocode/json?address={city},India&key={API_KEY}"
+    """Geocoding request to find the center of the city using Nominatim (Free Open-Source)."""
+    url = f"https://nominatim.openstreetmap.org/search?q={city},India&format=json"
+    headers = {"User-Agent": "UHIDetectionApp/1.0"}
     
-    response = requests.get(url)
+    response = requests.get(url, headers=headers)
     data = response.json()
 
-    if data["status"] != "OK":
-        raise Exception(f"Geocoding failed: {data['status']}")
+    if not data:
+        raise Exception(f"Geocoding failed for city: {city}")
 
-    location = data["results"][0]["geometry"]["location"]
-    lat = location["lat"]
-    lon = location["lng"]
+    lat = float(data[0]["lat"])
+    lon = float(data[0]["lon"])
 
     # Creates a 25km buffer around the city coordinates for analysis
     roi = ee.Geometry.Point([lon, lat]).buffer(25000)
