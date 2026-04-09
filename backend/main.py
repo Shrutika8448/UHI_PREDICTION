@@ -20,8 +20,7 @@ print("PROGRAM STARTED")
 app = Flask(__name__, static_folder='../build', static_url_path='/')
 CORS(app)
 
-# 2. Initialize Earth Engine with Service Account credentials
-initialize_ee()
+# Earth Engine is automatically initialized when gee_engine handles imports
 
 # 3. Load the model
 model = joblib.load("uhi_model.pkl")
@@ -232,7 +231,7 @@ def catch_all(e):
 
 # --- SERVER START ---
 
-if os.name == "__main__":
-    # Cloud Run provides the PORT environment variable
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+if __name__ == "__main__":
+    # Force port to 5001 for local React proxy
+    port = 5001
+    app.run(host="127.0.0.1", port=port, debug=False)
