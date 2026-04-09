@@ -28,7 +28,8 @@ export default function Riskmap() {
     setErrorMsg("");
     try {
       // 1. Fetch Heatmaps
-      const resMaps = await fetch("/generate-maps?city=Pune");
+      const apiUrl = process.env.REACT_APP_API_URL || "http://127.0.0.1:5001";
+      const resMaps = await fetch(`${apiUrl}/generate-maps?city=Pune`);
       if (!resMaps.ok) throw new Error("Failed to fetch maps.");
       const dataMaps = await resMaps.json();
       setCurrentMapHtml(dataMaps.current_map);
