@@ -18,7 +18,7 @@ print("PROGRAM STARTED")
 # 1. Initialize Flask and serve the React 'build' folder
 # Dockerfile puts build at /app/build and runs main.py from /app/backend
 app = Flask(__name__, static_folder='../build', static_url_path='/')
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Earth Engine is automatically initialized when gee_engine handles imports
 
