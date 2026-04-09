@@ -14,7 +14,9 @@ import google.oauth2.service_account as service_account
 # Check if we are running on Render (which passes the JSON as a string)
 if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
     creds_json = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-    credentials = service_account.Credentials.from_service_account_info(creds_json)
+    # Earth Engine requires explicit OAuth scopes when using a raw Service Account JSON
+    scopes = ['https://www.googleapis.com/auth/earthengine', 'https://www.googleapis.com/auth/cloud-platform']
+    credentials = service_account.Credentials.from_service_account_info(creds_json, scopes=scopes)
     ee.Initialize(credentials=credentials, project=creds_json.get("project_id", "uhv-preciction-492819"))
 else:
     # Just initialize with Earth Engine directly for local development. 
