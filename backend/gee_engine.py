@@ -7,7 +7,19 @@ import datetime
 
 print("IMPORTS DONE")
 
-ee.Initialize(project="uhv-prediction-492819")
+import os
+import json
+import google.oauth2.service_account as service_account
+
+# Check if we are running on Render (which passes the JSON as a string)
+if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+    creds_json = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+    credentials = service_account.Credentials.from_service_account_info(creds_json)
+    ee.Initialize(credentials=credentials, project=creds_json.get("project_id", "uhv-preciction-492819"))
+else:
+    # Just initialize with Earth Engine directly for local development. 
+    # It will use the local token you generated via ee.Authenticate()
+    ee.Initialize(project="uhv-preciction-492819")
 
 def mask_s2_clouds(image):
     qa = image.select('QA60')
@@ -132,8 +144,7 @@ def extract(city):
     return df
 
 
-print("CALLING FUNCTION")
-
-df = extract("Mumbai")
-
-print("PROGRAM FINISHED")
+if __name__ == "__main__":
+    print("CALLING FUNCTION")
+    df = extract("Mumbai")
+    print("PROGRAM FINISHED")
