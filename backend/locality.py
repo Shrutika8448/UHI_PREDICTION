@@ -1,7 +1,8 @@
 import requests
 import concurrent.futures
 
-GOOGLE_API_KEY = "AIzaSyDLJ41jOwhZCitWvqc7ot8UAPsvGVTxq4o"
+import os
+GOOGLE_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "AIzaSyA7ybs5MSMy-nq4QQkBiOrYG6Fi7CI1YD4")
 loc_cache = {}
 
 def get_suburb(lat, lon):
@@ -19,6 +20,8 @@ def get_suburb(lat, lon):
                         name = comp['long_name']
                         loc_cache[rounded] = name
                         return name
+        else:
+            print(f"Reverse geocoding status: {resp['status']} for ({lat},{lon})")
     except Exception as e:
         print(f"Geocoding error: {e}")
     
@@ -33,6 +36,8 @@ def add_locality(df):
         names = [f.result() for f in futures]
 
     df["locality"] = names
+    unique_localities = sorted(set(names))
+    print(f"LOCALITIES FOUND ({len(unique_localities)}): {unique_localities}")
     return df
 
 if __name__=="__main__":
