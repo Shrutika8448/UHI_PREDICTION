@@ -6,7 +6,8 @@ GOOGLE_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "AIzaSyA7ybs5MSMy-nq4QQkB
 loc_cache = {}
 
 def get_suburb(lat, lon):
-    rounded = (round(lat, 3), round(lon, 3))
+    # Round to 2 decimal places (~1.1km) to reduce unique geocode calls
+    rounded = (round(lat, 2), round(lon, 2))
     if rounded in loc_cache:
         return loc_cache[rounded]
 
@@ -29,14 +30,14 @@ def get_suburb(lat, lon):
     return "Unknown"
 
 def add_locality(df):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         futures = []
         for _, r in df.iterrows():
             futures.append(executor.submit(get_suburb, r.lat, r.lon))
         names = [f.result() for f in futures]
 
     df["locality"] = names
-    unique_localities = sorted(set(names))
+    unique_localities = sorted(set(n for n in names if n != "Unknown"))
     print(f"LOCALITIES FOUND ({len(unique_localities)}): {unique_localities}")
     return df
 
