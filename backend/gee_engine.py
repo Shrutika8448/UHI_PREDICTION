@@ -125,7 +125,7 @@ def extract(city):
     ])
     print("STACK READY")
 
-    samples = stack.sample(region=roi, scale=500, numPixels=500, geometries=True)
+    samples = stack.sample(region=roi, scale=500, numPixels=150, geometries=True)
     print("SAMPLES CREATED")
 
     data = samples.getInfo()
