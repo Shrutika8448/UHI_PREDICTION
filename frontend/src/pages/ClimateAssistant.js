@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { PUNE_LOCALITIES } from "./Dashboard";
+import { useState, useEffect, useMemo } from "react";
 import { jsPDF } from "jspdf";
 
 const STYLES = `
@@ -21,7 +20,7 @@ export default function ClimateAssistant() {
   const [errorMsg, setErrorMsg] = useState("");
   
   const [search, setSearch] = useState("");
-  const [selectedLocality, setSelectedLocality] = useState("Viman Nagar"); 
+  const [selectedLocality, setSelectedLocality] = useState(""); 
   const [showDropdown, setShowDropdown] = useState(false);
   
   const [allFeatures, setAllFeatures] = useState([]);
@@ -35,7 +34,12 @@ export default function ClimateAssistant() {
   // PDF Generation State
   const [pdfGenerating, setPdfGenerating] = useState(false);
 
-  const filtered = PUNE_LOCALITIES.filter(l => l.toLowerCase().includes(search.toLowerCase()));
+  const availableLocalities = useMemo(() => {
+    const names = [...new Set(allFeatures.map(f => f.locality).filter(Boolean).filter(n => n !== "Unknown"))];
+    return names.sort();
+  }, [allFeatures]);
+
+  const filtered = availableLocalities.filter(l => l.toLowerCase().includes(search.toLowerCase()));
 
   useEffect(() => {
     fetchData();
@@ -66,6 +70,12 @@ export default function ClimateAssistant() {
       const featuresRaw = (dataJson.features || []).map(f => f.properties);
       setAllFeatures(featuresRaw);
       setCityRankings(dataJson.rankings);
+      
+      const firstLocality = featuresRaw.find(f => f.locality && f.locality !== "Unknown");
+      if (firstLocality) {
+        setSelectedLocality(firstLocality.locality);
+        setSearch(firstLocality.locality);
+      }
     } catch (err) {
       console.error(err);
       setErrorMsg("Failed to fetch data from backend. Make sure the python backend is running locally on port 5001.");
