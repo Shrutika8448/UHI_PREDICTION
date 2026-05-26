@@ -1,4 +1,5 @@
 import os
+import time
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -17,6 +18,10 @@ from analytics import enrich_dataframe
 from map_generator import generate_current_heatmap, generate_future_heatmap
 
 print("PROGRAM STARTED")
+
+# In-memory cache: { city: { "data": json_dict, "timestamp": epoch } }
+_analyze_cache = {}
+CACHE_TTL_SECONDS = 30 * 60  # 30 minutes
 
 # 1. Initialize Flask and serve the React 'build' folder
 # Dockerfile puts build at /app/build and runs main.py from /app/backend
@@ -74,81 +79,113 @@ def df_to_geojson(df, category):
         features.append(feature)
     return features
 
+_maps_cache = {}
+
 @app.route("/generate-maps")
 def generate_maps():
     city = request.args.get("city", "Pune")
+
+    cached = _maps_cache.get(city)
+    if cached and (time.time() - cached["timestamp"]) < CACHE_TTL_SECONDS:
+        print(f"MAPS CACHE HIT for {city}")
+        return jsonify(cached["data"])
+
+    print(f"MAPS CACHE MISS for {city} — generating")
     df = extract(city)
-    
-    # FIX: Scale Albedo to match the existing XGBoost model's training data scale (0-10000)
+
     if "Albedo" in df.columns:
         df["Albedo"] = df["Albedo"] * 10000.0
-        
+
     df["prediction"] = model.predict(df[FEATURES])
     df = compute(df)
     df = enrich_dataframe(df, model, FEATURES)
-    
+
     current_map_html = generate_current_heatmap(df, city)
     future_map_html = generate_future_heatmap(df, city)
-    
-    return jsonify({
+
+    result = {
         "current_map": current_map_html,
         "future_map": future_map_html
-    })
+    }
+    _maps_cache[city] = {"data": result, "timestamp": time.time()}
+    return jsonify(result)
+
+def _run_analyze(city):
+    """Heavy analysis pipeline — called only on cache miss."""
+    df = extract(city)
+
+    if "Albedo" in df.columns:
+        df["Albedo"] = df["Albedo"] * 10000.0
+
+    df["prediction"] = model.predict(df[FEATURES])
+
+    print(f"PREDICTION STATS: min={df['prediction'].min():.4f}, max={df['prediction'].max():.4f}, mean={df['prediction'].mean():.4f}")
+
+    df = compute(df)
+    print(f"RISK STATS: min={df['risk'].min():.4f}, max={df['risk'].max():.4f}, mean={df['risk'].mean():.4f}")
+    df = enrich_dataframe(df, model, FEATURES)
+    df = add_locality(df)
+
+    if "locality" in df.columns:
+        locality_summary = df.groupby("locality").agg({
+            "risk": "mean",
+            "resilience_score": "mean",
+            "green_deficit": "mean",
+            "livability_index": "mean"
+        }).reset_index()
+
+        top_10 = locality_summary.sort_values("livability_index", ascending=False).head(10).to_dict(orient="records")
+        bottom_10 = locality_summary.sort_values("livability_index", ascending=True).head(10).to_dict(orient="records")
+    else:
+        top_10, bottom_10 = [], []
+
+    return {
+        "type": "FeatureCollection",
+        "city": city,
+        "rankings": {
+            "most_livable": top_10,
+            "least_livable": bottom_10
+        },
+        "features": df_to_geojson(df, "all_points")
+    }
+
 
 @app.route("/analyze")
 def analyze():
     city = request.args.get("city")
     if not city:
         return jsonify({"error": "City parameter is required"}), 400
-        
+
     try:
-        # Step 1: Extract satellite data from GEE
-        df = extract(city)
-        
-        # FIX: Scale Albedo to match the existing XGBoost model's training data scale (0-10000)
-        if "Albedo" in df.columns:
-            df["Albedo"] = df["Albedo"] * 10000.0
-        
-        # Step 2: Run predictions
-        df["prediction"] = model.predict(df[FEATURES])
-        
-        print(f"FEATURE RANGES: {dict(df[FEATURES].describe().loc[['min','max']])}")
-        print(f"PREDICTION STATS: min={df['prediction'].min():.4f}, max={df['prediction'].max():.4f}, mean={df['prediction'].mean():.4f}")
-        
-        # Step 3: Compute secondary indices and enrich data
-        df = compute(df)
-        print(f"RISK STATS: min={df['risk'].min():.4f}, max={df['risk'].max():.4f}, mean={df['risk'].mean():.4f}")
-        print(f"AMBIENT TEMP: {df['ambient_temp_celsius'].iloc[0]}")
-        df = enrich_dataframe(df, model, FEATURES)
-        df = add_locality(df)
-        
-        # Step 4: Generate rankings by locality
-        if "locality" in df.columns:
-            locality_summary = df.groupby("locality").agg({
-                "risk": "mean",
-                "resilience_score": "mean",
-                "green_deficit": "mean",
-                "livability_index": "mean"
-            }).reset_index()
-            
-            top_10 = locality_summary.sort_values("livability_index", ascending=False).head(10).to_dict(orient="records")
-            bottom_10 = locality_summary.sort_values("livability_index", ascending=True).head(10).to_dict(orient="records")
-        else:
-            top_10, bottom_10 = [], []
-            
-        return jsonify({
-            "type": "FeatureCollection",
-            "city": city,
-            "rankings": {
-                "most_livable": top_10,
-                "least_livable": bottom_10
-            },
-            "features": df_to_geojson(df, "all_points")
-        })
+        cached = _analyze_cache.get(city)
+        if cached and (time.time() - cached["timestamp"]) < CACHE_TTL_SECONDS:
+            print(f"CACHE HIT for {city}")
+            return jsonify(cached["data"])
+
+        print(f"CACHE MISS for {city} — running full pipeline")
+        result = _run_analyze(city)
+        _analyze_cache[city] = {"data": result, "timestamp": time.time()}
+        return jsonify(result)
 
     except Exception as e:
         print(f"ANALYSIS ERROR: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/summary")
+def api_summary():
+    """Lightweight endpoint: returns cached analysis if available, otherwise a minimal status."""
+    city = request.args.get("city", "Pune")
+    cached = _analyze_cache.get(city)
+    if cached and (time.time() - cached["timestamp"]) < CACHE_TTL_SECONDS:
+        data = cached["data"]
+        return jsonify({
+            "cached": True,
+            "city": city,
+            "rankings": data.get("rankings", {}),
+            "feature_count": len(data.get("features", []))
+        })
+    return jsonify({"cached": False, "city": city, "message": "No cached data yet. Call /analyze to generate."})
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
