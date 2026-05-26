@@ -1,11 +1,12 @@
 import requests
+# pyrefly: ignore [missing-import]
 import ee
 import os
 import google.auth
 
 # Define the Project ID as a variable for easy updates
 PROJECT_ID = "project-8dd5a2c6-c802-4fd1-8eb"
-API_KEY = "AIzaSyAkx28z2za3UzFI4wC4aoZVIrDPZtjdG3o"
+API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "AIzaSyA7ybs5MSMy-nq4QQkBiOrYG6Fi7CI1YD4")
 
 def initialize_ee():
     """Initializes Earth Engine using Cloud Run Service Account credentials."""
@@ -24,18 +25,18 @@ def initialize_ee():
         print(f"EE Initialization Failed: {e}")
 
 def get_roi(city):
-    """Geocoding request to find the center of the city using Nominatim (Free Open-Source)."""
-    url = f"https://nominatim.openstreetmap.org/search?q={city},India&format=json"
-    headers = {"User-Agent": "UHIDetectionApp/1.0"}
+    """Standard Geocoding request to find the center of the city."""
+    url = f"https://maps.googleapis.com/maps/api/geocode/json?address={city},India&key={API_KEY}"
     
-    response = requests.get(url, headers=headers)
+    response = requests.get(url)
     data = response.json()
 
-    if not data:
-        raise Exception(f"Geocoding failed for city: {city}")
+    if data["status"] != "OK":
+        raise Exception(f"Geocoding failed: {data['status']}")
 
-    lat = float(data[0]["lat"])
-    lon = float(data[0]["lon"])
+    location = data["results"][0]["geometry"]["location"]
+    lat = location["lat"]
+    lon = location["lng"]
 
     # Creates a 25km buffer around the city coordinates for analysis
     roi = ee.Geometry.Point([lon, lat]).buffer(25000)
