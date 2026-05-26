@@ -251,10 +251,15 @@ function ChatBot({ open, setOpen }) {
   const [cityData, setCityData] = useState(null);
 
   useEffect(() => {
-    // Background fetch the contextual data for Pune
     const fetchCityData = async () => {
       try {
          const apiUrl = process.env.REACT_APP_API_URL || "http://127.0.0.1:5001";
+         const summaryRes = await fetch(`${apiUrl}/api/summary?city=Pune`);
+         const summaryData = await summaryRes.json();
+         if (summaryData.cached && summaryData.rankings) {
+           setCityData(summaryData);
+           return;
+         }
          const res = await fetch(`${apiUrl}/analyze?city=Pune`);
          const data = await res.json();
          setCityData(data);
