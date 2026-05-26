@@ -1,5 +1,6 @@
 print("PROGRAM STARTED")
 
+# pyrefly: ignore [missing-import]
 import ee
 import pandas as pd
 from city_to_roi import get_roi
@@ -124,7 +125,7 @@ def extract(city):
     ])
     print("STACK READY")
 
-    samples = stack.sample(region=roi, scale=500, numPixels=200, geometries=True)
+    samples = stack.sample(region=roi, scale=500, numPixels=500, geometries=True)
     print("SAMPLES CREATED")
 
     data = samples.getInfo()
