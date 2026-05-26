@@ -10,3 +10,4 @@ requests==2.31.0
 xgboost>=1.7.0
 scikit-learn>=1.0.0
 google-generativeai
+python-dotenv
