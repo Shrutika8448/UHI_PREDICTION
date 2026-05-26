@@ -13,10 +13,15 @@ def compute(df):
     mean_lon = df["lon"].mean()
     current_temp = get_current_temperature(mean_lat, mean_lon)
 
-    # Offset risk based on real-time ambient heat
-    temp_factor = (current_temp - 30.0) * 1.5
+    # Model predicts a UHI intensity index (range ~-4 to 13 on training data).
+    # Normalize to 0-100 risk using the training data's 5th/95th percentiles.
+    PRED_LOW = -4.0
+    PRED_HIGH = 10.0
+    df["risk"] = ((df["prediction"] - PRED_LOW) / (PRED_HIGH - PRED_LOW)) * 100.0
 
-    df["risk"] = df["prediction"] + temp_factor
+    # Offset risk based on real-time ambient heat vs baseline (30°C)
+    temp_factor = (current_temp - 30.0) * 3.0
+    df["risk"] = df["risk"] + temp_factor
     df["risk"] = df["risk"].clip(0, 100)
 
     df["livability"] = (
