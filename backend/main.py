@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify, send_from_directory
@@ -109,8 +112,13 @@ def analyze():
         # Step 2: Run predictions
         df["prediction"] = model.predict(df[FEATURES])
         
+        print(f"FEATURE RANGES: {dict(df[FEATURES].describe().loc[['min','max']])}")
+        print(f"PREDICTION STATS: min={df['prediction'].min():.4f}, max={df['prediction'].max():.4f}, mean={df['prediction'].mean():.4f}")
+        
         # Step 3: Compute secondary indices and enrich data
         df = compute(df)
+        print(f"RISK STATS: min={df['risk'].min():.4f}, max={df['risk'].max():.4f}, mean={df['risk'].mean():.4f}")
+        print(f"AMBIENT TEMP: {df['ambient_temp_celsius'].iloc[0]}")
         df = enrich_dataframe(df, model, FEATURES)
         df = add_locality(df)
         
