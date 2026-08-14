@@ -34,6 +34,64 @@ def mask_s2_clouds(image):
 
 print("EE INITIALIZED")
 
+S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
+LANDSAT_COLLECTION = "LANDSAT/LC08/C02/T1_L2"
+
+
+def _date_range(days_back, end_date=None):
+    end = end_date or datetime.datetime.now()
+    start = end - datetime.timedelta(days=days_back)
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+def _s2_collection(roi, start_date, end_date, max_cloud_pct):
+    return (
+        ee.ImageCollection(S2_COLLECTION)
+        .filterBounds(roi)
+        .filterDate(start_date, end_date)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", max_cloud_pct))
+        .map(mask_s2_clouds)
+    )
+
+
+def get_s2_median(roi, end_date):
+    """Return a Sentinel-2 median composite, falling back to wider/date-looser filters if empty."""
+    strategies = [
+        (180, 60),
+        (365, 80),
+    ]
+    for days_back, max_cloud in strategies:
+        start_date, end = _date_range(days_back, datetime.datetime.strptime(end_date, "%Y-%m-%d"))
+        col = _s2_collection(roi, start_date, end, max_cloud)
+        count = col.size().getInfo()
+        print(f"S2 search ({days_back}d, <{max_cloud}% cloud): {count} scenes")
+        if count > 0:
+            return col.median()
+
+    raise Exception(
+        "No Sentinel-2 imagery found for this city. Try again later or pick a different city."
+    )
+
+
+def get_landsat_median(roi, end_date):
+    """Return a Landsat median composite with a wider fallback window if needed."""
+    for days_back in (180, 365):
+        start_date, end = _date_range(days_back, datetime.datetime.strptime(end_date, "%Y-%m-%d"))
+        col = (
+            ee.ImageCollection(LANDSAT_COLLECTION)
+            .filterBounds(roi)
+            .filterDate(start_date, end)
+        )
+        count = col.size().getInfo()
+        print(f"Landsat search ({days_back}d): {count} scenes")
+        if count > 0:
+            return col.median()
+
+    raise Exception(
+        "No Landsat imagery found for this city. Try again later or pick a different city."
+    )
+
+
 def extract(city):
 
     print("ENTERED EXTRACT")
@@ -42,23 +100,13 @@ def extract(city):
     print("ROI CREATED")
 
     end_date = datetime.datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.datetime.now() - datetime.timedelta(days=60)).strftime('%Y-%m-%d')
 
-    collection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED") \
-        .filterBounds(roi) \
-        .filterDate(start_date, end_date) \
-        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
-        .map(mask_s2_clouds) \
-        .median()
-
+    collection = get_s2_median(roi, end_date)
     print("COLLECTION READY")
 
     # For Sentinel-2, there is no thermal band (LST). We will use LST from Landsat as an intersecting band
     # or rely solely on NDWI and atmospheric temp. The model needs LST.
-    landsat_coll = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2") \
-        .filterBounds(roi) \
-        .filterDate(start_date, end_date) \
-        .median()
+    landsat_coll = get_landsat_median(roi, end_date)
 
     lst = landsat_coll.select("ST_B10") \
         .multiply(0.00341802).add(149).subtract(273).rename("LST")
